@@ -1,0 +1,16 @@
+# Android / Gradle build outputs — never committed
+*.iml
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+
+# OS / IDE
+.DS_Store
+.idea/
+
+# Keystores / secrets
+*.jks
+*.keystore

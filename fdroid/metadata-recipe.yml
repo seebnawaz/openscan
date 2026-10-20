@@ -1,0 +1,51 @@
+# F-Droid build recipe for OpenScan.
+# This is the file that goes into fdroiddata/metadata/com.openscan.yml when
+# submitting to F-Droid. Replace REPO_URL / commit tags with the real repo.
+#
+# Reference: https://f-droid.org/docs/Build_Metadata_Reference/
+
+Categories:
+  - Office
+  - Multimedia
+License: Apache-2.0
+AuthorName: OpenScan contributors
+SourceCode: REPO_URL
+IssueTracker: REPO_URL/issues
+# Changelog: REPO_URL/blob/HEAD/CHANGELOG.md
+
+AutoName: OpenScan
+Description: |-
+  Free, on-device document scanner. Camera capture with live edge detection,
+  automatic perspective correction, enhance filters (Original, Grayscale, B&W,
+  Magic Color), multi-page documents, and no-watermark PDF export. On-device OCR
+  via Tesseract produces searchable PDFs. No account, no ads, no Google Play
+  Services.
+
+RepoType: git
+Repo: REPO_URL
+
+Builds:
+  - versionName: 0.1-m2
+    versionCode: 1
+    commit: v0.1-m2
+    subdir: app
+    gradle:
+      - yes
+    # OpenCV ships prebuilt native .so in its Maven AAR, which the F-Droid
+    # scanner flags. Build OpenCV from source as an srclib and depend on the
+    # source module instead of org.opencv:opencv. See FDROID.md "OpenCV" for the
+    # full procedure; srclib stub:
+    srclibs:
+      - OpenCV@4.11.0
+    # prebuild step points the gradle module at the built srclib AAR/module.
+
+MaintainerNotes: |-
+  Fully FOSS. The only prebuilt-binary concern is OpenCV; resolved by building
+  it from source via the OpenCV srclib rather than the Maven artifact. Tesseract
+  (tesseract4android) builds Leptonica + Tesseract from source and is already
+  F-Droid-accepted. No ML Kit / Firebase / GMS anywhere.
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags
+CurrentVersion: 0.1-m2
+CurrentVersionCode: 1

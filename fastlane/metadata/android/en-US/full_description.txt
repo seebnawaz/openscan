@@ -1,0 +1,14 @@
+OpenScan turns your camera into a document scanner — fully free, fully on-device,
+no account, no ads, and no watermark on your exports.
+
+Features:
+* Live edge detection with a real-time outline as you aim
+* Automatic perspective correction (de-skew) to a flat page
+* Enhance filters: Original, Grayscale, Black & White, and Magic Color
+* Multi-page documents — reorder and delete pages
+* Export to PDF with no watermark, ever
+* Searchable-PDF OCR (on-device, Tesseract)
+* Everything runs locally — your documents never leave your phone
+
+OpenScan uses only free and open-source components (OpenCV for image processing,
+Tesseract for OCR). No Google Play Services required.

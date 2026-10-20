@@ -1,0 +1,2 @@
+First F-Droid release: camera capture with live edge overlay, perspective
+correction, 4 enhance filters, multi-page documents, no-watermark PDF export.
