@@ -18,14 +18,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.opencv.core.Mat
+import org.opencv.core.Point
 
-/** Where in the capture flow the user is. */
+/** Max long-edge (px) the pipeline works at. Caps camera frames (often 4000px)
+ *  so detection is fast and the exported JPEG stays small. */
+private const val WORK_MAX_EDGE = 2048
+
 sealed interface Screen {
     data object Camera : Screen
     data object Working : Screen
-    /** A freshly scanned page under review before it's added to the document. */
+    /** Manual crop: the [source] image with draggable [corners] (0..1 fractions). */
+    data class Crop(val source: Bitmap, val corners: List<Point>) : Screen
+    /** Warped page under review before it's added, with the chosen [filter]. */
     data class Review(val warpedBmp: Bitmap, val output: Bitmap, val filter: Filter) : Screen
-    /** The multi-page document so far. */
     data class Pages(val pages: List<Page>) : Screen
     data class Error(val message: String) : Screen
 }
@@ -35,23 +40,40 @@ class ScanViewModel : ViewModel() {
     val screen: StateFlow<Screen> = _screen.asStateFlow()
 
     private val doc = ScanDocument()
-    private var reviewWarped: Mat? = null   // Mat behind the page under review
+    private var sourceMat: Mat? = null      // the image being cropped (downscaled)
+    private var reviewWarped: Mat? = null   // warped page under review
 
     fun goCamera() { _screen.value = Screen.Camera }
     fun goPages() { _screen.value = Screen.Pages(doc.pages) }
 
-    /** A frame arrived (camera capture or gallery pick) → run the CV pipeline. */
-    fun onFrame(bitmap: Bitmap) = process { bitmap }
+    fun onFrame(bitmap: Bitmap) = prepareCrop { bitmap }
+    fun onGalleryPick(ctx: Context, uri: Uri) = prepareCrop { loadBitmap(ctx, uri) }
 
-    fun onGalleryPick(ctx: Context, uri: Uri) = process { loadBitmap(ctx, uri) }
-
-    private fun process(load: () -> Bitmap) {
+    /** Load → downscale → auto-detect corners → show the crop editor. */
+    private fun prepareCrop(load: () -> Bitmap) {
         _screen.value = Screen.Working
         viewModelScope.launch {
             try {
                 _screen.value = withContext(Dispatchers.Default) {
-                    val src = DocumentCv.toMat(load())
-                    val warped = DocumentCv.warp(src, DocumentCv.detect(src))
+                    val work = downscale(load(), WORK_MAX_EDGE)
+                    val mat = DocumentCv.toMat(work)
+                    sourceMat = mat
+                    Screen.Crop(work, DocumentCv.detect(mat))
+                }
+            } catch (e: Exception) {
+                _screen.value = Screen.Error(e.message ?: e.javaClass.simpleName)
+            }
+        }
+    }
+
+    /** User confirmed the 4 corners → warp, apply the default filter, go to review. */
+    fun confirmCrop(corners: List<Point>) {
+        val src = sourceMat ?: return
+        _screen.value = Screen.Working
+        viewModelScope.launch {
+            try {
+                _screen.value = withContext(Dispatchers.Default) {
+                    val warped = DocumentCv.warp(src, corners)
                     reviewWarped = warped
                     Screen.Review(
                         DocumentCv.toBitmap(warped),
@@ -65,7 +87,6 @@ class ScanViewModel : ViewModel() {
         }
     }
 
-    /** Re-render the page under review with a different filter. */
     fun previewFilter(filter: Filter) {
         val w = reviewWarped ?: return
         val cur = _screen.value as? Screen.Review ?: return
@@ -75,18 +96,16 @@ class ScanViewModel : ViewModel() {
         }
     }
 
-    /** Accept the reviewed page into the document, then back to camera for the next. */
     fun addReviewedPage() {
         val r = _screen.value as? Screen.Review ?: return
         doc.add(r.warpedBmp, r.output, r.filter)
-        reviewWarped = null
+        reviewWarped = null; sourceMat = null
         _screen.value = Screen.Camera
     }
 
     fun removePage(id: Long) { doc.remove(id); _screen.value = Screen.Pages(doc.pages) }
     fun movePage(from: Int, to: Int) { doc.move(from, to); _screen.value = Screen.Pages(doc.pages) }
 
-    /** Export every page to a no-watermark PDF; returns a shareable Uri via [onReady]. */
     fun exportPdf(ctx: Context, onReady: (Uri) -> Unit, onError: (String) -> Unit) {
         if (doc.isEmpty()) { onError("no pages"); return }
         viewModelScope.launch {
@@ -101,13 +120,20 @@ class ScanViewModel : ViewModel() {
 
     fun pageCount() = doc.size()
 
+    private fun downscale(bmp: Bitmap, maxEdge: Int): Bitmap {
+        val long = maxOf(bmp.width, bmp.height)
+        if (long <= maxEdge) return bmp
+        val s = maxEdge.toFloat() / long
+        return Bitmap.createScaledBitmap(bmp, (bmp.width * s).toInt(), (bmp.height * s).toInt(), true)
+    }
+
     private fun loadBitmap(ctx: Context, uri: Uri): Bitmap {
         ctx.contentResolver.openInputStream(uri).use { input ->
             val bytes = input!!.readBytes()
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             var sample = 1
-            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 2000) sample *= 2
+            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > WORK_MAX_EDGE * 2) sample *= 2
             val opts = BitmapFactory.Options().apply { inSampleSize = sample }
             return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: error("could not decode image")
         }

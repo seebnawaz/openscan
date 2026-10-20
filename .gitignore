@@ -14,3 +14,6 @@ local.properties
 # Keystores / secrets
 *.jks
 *.keystore
+
+# build artifacts downloaded locally
+*.apk

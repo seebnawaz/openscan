@@ -51,6 +51,7 @@ fun ScanScreen(vm: ScanViewModel = viewModel()) {
             Text("Error: ${s.message}")
             Button(onClick = vm::goCamera) { Text("Back") }
         }
+        is Screen.Crop -> CropEditor(s, onConfirm = vm::confirmCrop, onRetake = vm::goCamera)
         is Screen.Review -> ReviewView(s, vm)
         is Screen.Pages -> PagesView(s, vm, ctx)
     }
